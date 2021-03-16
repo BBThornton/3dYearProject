@@ -1,0 +1,271 @@
+version: '3.9'
+services:
+
+  database:
+    extends:
+      file: ../mongo_service/docker-compose.yml
+      service: database
+
+  database_init:
+    extends:
+      file: ../mongo_service/db_init/docker-compose.yml
+      service: database_init
+
+  manifest_creator:
+    build:
+      context: ./fastq_utils
+      dockerfile: manifest_creator/Dockerfile
+    container_name: manifest_creator
+    environment:
+      - 'EXP_ID=${MC_EXP_ID}'
+      - 'SAMPLES=${MC_SAMPLES}'
+      - 'OUTPUT_DIR=${MC_OUT_DIR}'
+      - 'PARENT=${MD_EXP_ID}'
+    depends_on:
+      - database
+    command:
+      python -u manifest_creator.py
+    volumes:
+      - ../PipelineOutput:/manifest_creator/data
+      - ../mongo_service/db_interface/pymongoClient:/manifest_creator/pymongoClient
+    networks:
+      - mongo-net
+
+  metadata_creator:
+    build:
+      context: ./fastq_utils/metadata_creator
+      dockerfile: Dockerfile
+    container_name: metadata_creator
+    environment:
+      - 'EXP_ID=${MD_EXP_ID}'
+      - 'PARENT=${MC_EXP_ID}'
+      - 'OUTPUT_DIR=${MD_OUT_DIR}'
+      - 'PARAMS=${MD_PARAMS}'
+    depends_on:
+      - database
+    command:
+      python -u metadata_creator.py
+    volumes:
+      - ../PipelineOutput:/metadata_creator/data
+      - ../mongo_service/db_interface/pymongoClient:/metadata_creator/pymongoClient
+    networks:
+      - mongo-net
+
+  qiime_data_import:
+    build:
+      context: ./fastq_qa
+      dockerfile: qiime_data_import.Dockerfile
+    container_name: qiime_data_import
+    environment:
+      - 'EXP_ID=${DI_EXP_ID}'
+      - 'PARENT=${MC_EXP_ID}'
+      - 'OUTPUT_DIR=${DI_OUT_DIR}'
+    depends_on:
+      - database
+    command:
+      python -u qiime_data_import.py
+    volumes:
+      - ../PipelineOutput:/qiime_data_import/data
+      - ../mongo_service/db_interface/pymongoClient:/qiime_data_import/pymongoClient
+    networks:
+      - mongo-net
+
+  qiime_qa:
+    build:
+      context: ./fastq_qa
+      dockerfile: qiime_qa.Dockerfile
+    container_name: qiime_qa
+    environment:
+      - 'EXP_ID=${QA_EXP_ID}'
+      - 'PARENT=${DI_EXP_ID}'
+      - 'OUTPUT_DIR=${QA_OUT_DIR}'
+      - 'PARAMS=${QA_PARAMS}'
+    depends_on:
+      - database
+    command:
+      python -u qiime_qa.py
+    volumes:
+      - ../PipelineOutput:/qiime_qa/data
+      - ../mongo_service/db_interface/pymongoClient:/qiime_qa/pymongoClient
+    networks:
+      - mongo-net
+
+  qiime_classifier:
+    build:
+      context: ./classifier
+      dockerfile: Dockerfile
+    container_name: qiime_classifier
+    environment:
+      - 'EXP_ID=${TC_EXP_ID}'
+      - 'PARENT=${QA_EXP_ID}'
+      - 'OUTPUT_DIR=${TC_OUT_DIR}'
+      - 'PARAMS=${TC_PARAMS}'
+    depends_on:
+      - database
+    command:
+      python -u feature_classification.py
+    volumes:
+      - ../PipelineOutput:/qiime_classifier/data
+      - ../mongo_service/db_interface/pymongoClient:/qiime_classifier/pymongoClient
+      - ./sklearn_classifier:/qiime_classifier/classifiers
+    networks:
+      - mongo-net
+
+  qiime_phylogeny_tree:
+    build:
+      context: phylogenic_tree
+      dockerfile: Dockerfile
+    container_name: qiime_phylogeny_tree
+    environment:
+      - 'EXP_ID=${PT_EXP_ID}'
+      - 'PARENT=${QA_EXP_ID}'
+      - 'OUTPUT_DIR=${PT_OUT_DIR}'
+      - 'PARAMS=${PT_PARAMS}'
+    depends_on:
+      - database
+    command:
+      python -u rooted_tree.py
+    volumes:
+      - ../PipelineOutput:/qiime_rooted_tree/data
+      - ../mongo_service/db_interface/pymongoClient:/qiime_rooted_tree/pymongoClient
+    networks:
+      - mongo-net
+
+  qiime_frequency_tables:
+    build:
+      context: ./frequency_tables
+      dockerfile: Dockerfile
+    container_name: qiime_frequency_tables
+    environment:
+      - 'EXP_ID=${FT_EXP_ID}'
+      - 'PARENT=${TC_EXP_ID}'
+      - 'OUTPUT_DIR=${FT_OUT_DIR}'
+      - 'PARAMS=${FT_PARAMS}'
+    depends_on:
+      - database
+    command:
+      python -u frequency_tables.py
+    volumes:
+      - ../PipelineOutput:/qiime_frequency_tables/data
+      - ../mongo_service/db_interface/pymongoClient:/qiime_frequency_tables/pymongoClient
+    networks:
+      - mongo-net
+
+  qiime_alpha_diversity:
+    build:
+      context: ./diversity
+      dockerfile: alpha_diversity.Dockerfile
+    container_name: qiime_alpha_diversity
+    environment:
+      - 'EXP_ID=${AD_EXP_ID}'
+      - 'PARENT=${FT_EXP_ID}'
+      - 'OUTPUT_DIR=${AD_OUT_DIR}'
+      - 'PARAMS=${AD_PARAMS}'
+    depends_on:
+      - database
+    command:
+      python -u alpha_diversity.py
+    volumes:
+      - ../PipelineOutput:/qiime_alpha_diversity/data
+      - ../mongo_service/db_interface/pymongoClient:/qiime_alpha_diversity/pymongoClient
+    networks:
+      - mongo-net
+
+  lefse:
+    build:
+      context: ./lefse
+      dockerfile: Dockerfile
+    container_name: lefse
+    user: '0'
+    environment:
+      - 'EXP_ID=${LA_EXP_ID}'
+      - 'PARENT=${FT_EXP_ID}'
+      - 'OUTPUT_DIR=${LA_OUT_DIR}'
+      - 'PARAMS=${LA_PARAMS}'
+    depends_on:
+      - database
+    command:
+      python -u lefse_prep.py
+    volumes:
+      - ../PipelineOutput:/lefse/data
+      - ../mongo_service/db_interface/pymongoClient:/lefse/pymongoClient
+    networks:
+      - mongo-net
+
+  realtive_frequency_to_biom:
+    build:
+      context: frequency_tables
+      dockerfile: to_biom.Dockerfile
+    container_name: realtive_frequency_to_biom
+    environment:
+      - 'EXP_ID=${FTB_EXP_ID}'
+      - 'PARENT=${FT_EXP_ID}'
+      - 'OUTPUT_DIR=${FTB_OUT_DIR}'
+      - 'PARAMS=${FTB_PARAMS}'
+    depends_on:
+      - database
+    command:
+      python -u frequency_artifact_to_biom.py
+    volumes:
+      - ../PipelineOutput:/realtive_frequency_to_biom/data
+      - ../mongo_service/db_interface/pymongoClient:/realtive_frequency_to_biom/pymongoClient
+    networks:
+      - mongo-net
+
+  differential_abundance:
+    build:
+      context: ./differential_abundance
+      dockerfile: Dockerfile
+    container_name: differential_abundance
+    environment:
+      - 'EXP_ID=${DA_EXP_ID}'
+      - 'PARENT=${FT_EXP_ID}'
+      - 'OUTPUT_DIR=${DA_OUT_DIR}'
+      - 'PARAMS=${DA_PARAMS}'
+    depends_on:
+      - database
+    command:
+      python -u da.py
+    volumes:
+      - ../PipelineOutput:/da/data
+      - ../mongo_service/db_interface/pymongoClient:/da/pymongoClient
+    networks:
+      - mongo-net
+
+#  testing:
+#    build:
+#      context: ./testing
+#      dockerfile: Dockerfile
+#    container_name: testing
+#    environment:
+#      - 'EXP_ID=Morgan_data_qa'
+#      - 'PARAMS={
+#            "input":"Morgan_data_input",
+#            "output_dir":"./data/morgan",
+#            }'
+#    depends_on:
+#      - database
+#    ports:
+#      - 8888:8888
+#
+#    command:
+##      python -u qiime_qa.py
+#       tail -f /dev/null
+#    volumes:
+#      - ../PipelineOutput:/qiime_qa/data
+#      - ../mongo_service/db_interface/pymongoClient:/qiime_qa/pymongoClient
+#
+#    networks:
+#      - mongo-net
+
+
+volumes:
+  mongodb_data:
+    external:
+      name: mongodb_data
+
+networks:
+  mongo-net:
+    external: true
+    name: mongo-net
+    driver: bridge

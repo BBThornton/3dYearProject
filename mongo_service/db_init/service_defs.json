@@ -1,0 +1,186 @@
+[
+  {
+    "_id": "Manifest_Creator",
+    "parent": null,
+    "input": null,
+    "output": {
+      "data": [
+        "manifest.txt"
+      ],
+      "visuals": null
+    }
+  },
+   {
+    "_id": "Metadata_Creator",
+    "parent": "Manifest_Creator",
+    "input": null,
+    "output": {
+      "data": [
+        "metadata.tsv"
+      ],
+      "visuals": null
+    }
+  },
+  {
+    "_id": "Data_Import",
+    "parent": "Manifest_Creator",
+    "output": {
+      "data": [
+        "sequences.qza"
+      ],
+      "visuals": null
+    }
+  },
+  {
+    "_id": "Quality_Analysis",
+    "parent": "Data_Import",
+    "output": {
+      "data": [
+        "filtered_samples_table.qza",
+        "filtered_representative_sequences.qza"
+      ],
+      "visuals": [
+        "q_score_stats.qzv",
+        "feature_table_summary.qzv",
+        "sample_deblur_stats.qzv"
+      ]
+    },
+    "params": {
+      "q_score": {
+        "min_quality": "Int, optional\n    The minimum acceptable PHRED score. All PHRED scores less that this\n    value are considered to be low PHRED scores.",
+        "quality_window": "Int, optional\n    The maximum number of low PHRED scores that can be observed in direct\n    succession before truncating a sequence read.",
+        "min_length_fraction": "Float, optional\n    The minimum length that a sequence read can be following truncation and\n    still be retained. This length should be provided as a fraction of the input sequence length.",
+        "max_ambiguous": "Int, optional\n    The maximum number of ambiguous (i.e., N) base calls. This is applied\n    after trimming sequences based on `min_length_fraction`."
+      },
+      "deblur_denoise": {
+        "trim_length": "Int\n  Sequence trim length, specify -1 to disable trimming.",
+        "left_trim_len": "Int % Range(0, None), optional\n Sequence trimming from the 5' end. A value of 0 will disable this trim.",
+        "sample_stats": "Bool, optional\n    If true, gather stats per sample.",
+        "mean_error": "Float, optional\n    The mean per nucleotide error, used for original sequence estimate.",
+        "indel_prob": "Float, optional\n    Insertion/deletion (indel) probability (same for N indels).",
+        "indel_max": "Int, optional\n    Maximum number of insertion/deletions.",
+        "min_reads": "Int, optional\n    Retain only features appearing at least min_reads times across all\n    samples in the resulting feature table.",
+        "min_size": "Int, optional\n    In each sample, discard all features with an abundance less than\n    min_size.",
+        "jobs_to_start": "Int, optional\n    Number of jobs to start (if to run in parallel).",
+        "hashed_feature_ids": "Bool, optional\n    If true, hash the feature IDs."
+      }
+    }
+  },
+  {
+    "_id": "Feature_Classification",
+    "parent": "Quality_Analysis",
+    "output": {
+      "data": [
+        "classified_taxa.qza"
+      ],
+      "visuals": [
+        "classified_taxa_table.qzv"
+      ]
+    },
+    "params": {
+      "classifier": "Name of the classifier to use \n Silva 132, Silva 138 or gengrenes",
+      "classify_sklearn": {
+        "reads_per_batch" : "Int % Range(0, None), optional\n    Number of reads to process in each batch. If \"auto\", this parameter is\n    autoscaled to min( number of query sequences / n_jobs, 20000).",
+        "n_jobs" : "Int, optional\n    The maximum number of concurrently worker processes. If -1 all CPUs are\n    used. If 1 is given, no parallel computing code is used at all, which\n    is useful for debugging. For n_jobs below -1, (n_cpus + 1 + n_jobs) are\n    used. Thus for n_jobs = -2, all CPUs but one are used.",
+        "pre_dispatch" : "Str, optional\n    \"all\" or expression, as in \"3*n_jobs\". The number of batches (of tasks)\n    to be pre-dispatched.",
+        "confidence" : "Float % Range(0, 1, inclusive_end=True) | Str % Choices('disable'), optional\n    Confidence threshold for limiting taxonomic depth. Set to \"disable\" to\n    disable confidence calculation, or 0 to calculate confidence but not\n    apply it to limit the taxonomic depth of the assignments.",
+        "read_orientation" : "Str % Choi ces('same', 'reverse-complement', 'auto'), optional\n    Direction of reads with respect to reference sequences. same will cause\n    reads to be classified unchanged; reverse-complement will cause reads\n    to be reversed and complemented prior to classification. \"auto\" will\n    autodetect orientation based on the confidence estimates for the first\n    100 reads."
+      }
+    }
+  },
+  {
+    "_id": "Rooted_Tree",
+    "parent": "Feature_Classification",
+    "output": {
+      "data": [
+        "rooted_tree.qza"
+      ]
+    }
+  },
+
+  {
+    "_id": "Frequency_Tables",
+    "parent": "Feature_Classification",
+    "output": {
+      "data": [
+        "frequency_otu_collapsed_table.qza",
+        "frequency_uid_collapsed_table.qza",
+        "relative_otu_freq_collapsed_table.qza",
+        "relative_uid_freq_collapsed_table.qza"
+      ],
+      "visuals": [
+        "id_freq_table.qzv",
+        "otu_freq_table.qzv",
+        "id_relative_freq_table.qzv",
+        "otu_relative_freq_table.qzv",
+        "stacked_taxa_frequency_boxplot.qzv",
+        "individual_taxa_boxplots.png"
+      ]
+    },
+
+    "params": {
+      "level": "  The taxonomic level at which the features should be collapsed. All\n    ouput features will have exactly this many levels of taxonomic\n    annotation."
+    }
+  },
+    {
+    "_id": "Alpha_Diversity",
+    "parent": "Frequency_Tables",
+    "output": {
+      "data": [
+        "alpha_diversity.qza"
+      ],
+      "visuals": [
+        "alpha_diversity_boxplots.qzv",
+        "beta_diversity_boxplots_dx.qzv",
+        "empress_pcoa_plot.qzv"
+
+      ]
+    },
+    "params": {
+      "level": "  The taxonomic level at which the features should be collapsed. All\n    ouput features will have exactly this many levels of taxonomic\n    annotation."
+    }
+  },
+  {
+    "_id": "Freq_To_Biom",
+    "parent": "Frequency_Tables",
+    "output": {
+      "data": [
+        "out_freq_table.tsv"
+      ],
+      "visuals": null
+    }
+  },
+  {
+    "_id": "Machine_Learning_Data_Prep",
+    "parent": null,
+    "output": {
+      "data": "classification_data",
+      "visuals": null
+    },
+    "params": {
+
+    }
+  },
+  {
+    "_id": "Differential_Abundance",
+    "parent": "Frequency_Tables",
+    "output": {
+      "data": [
+      ],
+      "visuals": [
+      ]
+    },
+    "params": {
+    }
+  },
+  {
+    "_id": "Random_Forest",
+    "parent": "Machine_Learning_Data_Prep",
+    "output": {
+      "data": null,
+      "visuals": [
+        "random_forest_auc.png"
+      ]
+    }
+  }
+]

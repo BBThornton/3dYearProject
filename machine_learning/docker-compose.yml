@@ -1,0 +1,74 @@
+version: '3.9'
+services:
+  database:
+    extends:
+      file: ../mongo_service/docker-compose.yml
+      service: database
+
+  database_init:
+    extends:
+      file: ../mongo_service/db_init/docker-compose.yml
+      service: database_init
+
+  data_prep:
+    build:
+      context: ./data_prep
+      dockerfile: Dockerfile
+    container_name: data_prep
+#    ("Morgan_alpha_diversity","alpha_diversity:qza")
+    environment:
+      - 'EXP_ID=Morgan_ml_data_prep'
+      - 'OUTPUT_DIR=./data/morgan/ml_data_prep'
+      - 'PARENT_NAMES=[("Morgan_biom","out_freq_table.tsv")]'
+      - 'PARAMS={
+          "classifier_column":"dx"
+                      }'
+    depends_on:
+      - database
+    command:
+      python -u data_prep.py
+    #       tail -f /dev/null
+
+    volumes:
+      - ../PipelineOutput:/data_prep/data
+      - ../mongo_service/db_interface/pymongoClient:/data_prep/pymongoClient
+
+    networks:
+      - mongo-net
+
+  random_forest:
+    build:
+      context: ./random_forest
+      dockerfile: Dockerfile
+    container_name: random_forest
+    environment:
+      - 'EXP_ID=Morgan_randomforest'
+      - 'PARENT=Morgan_ml_data_prep'
+      - 'OUTPUT_DIR=./data/morgan/random_forest'
+      - 'PARAMS={
+
+                    }'
+    depends_on:
+      - database
+    command:
+      python -u random_forest.py
+    #       tail -f /dev/null
+
+    volumes:
+      - ../PipelineOutput:/random_forest/data
+      - ../mongo_service/db_interface/pymongoClient:/random_forest/pymongoClient
+
+    networks:
+      - mongo-net
+
+volumes:
+  mongodb_data:
+    external:
+      name: mongodb_data
+
+
+networks:
+  mongo-net:
+    external: true
+    name: mongo-net
+    driver: bridge

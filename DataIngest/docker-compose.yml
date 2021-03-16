@@ -1,0 +1,53 @@
+version: '3.9'
+services:
+
+  database:
+    extends:
+      file: ../mongo_service/docker-compose.yml
+      service: database
+
+  ena_download_service:
+    build:
+      context: ..
+      dockerfile: DataIngest/ena_download/Dockerfile
+    container_name: ena_data_collection
+    environment:
+      - JSON_FILE=table.txt
+      - OUTPUT_DIR=/data/morgan/samples
+    depends_on:
+      - database
+    command:
+      python -u ena_download.py
+#      tail -f /dev/null
+    volumes:
+      - ../filereport_read_run_PRJNA82111_json.txt:/ena_download/table.txt
+      - ../testdata:/ena_download/data
+    networks:
+      - mongo-net
+
+  metadata_ingest:
+    build:
+      context: ..
+      dockerfile: DataIngest/metadata_ingest/Dockerfile
+    container_name: metadata_ingest
+    environment:
+      - META_FILE=metadata.txt
+    depends_on:
+      - database
+    command: python text_metadata.py
+    volumes:
+    - ../osccar_prism_metadata.txt:/metadata_ingest/metadata.txt
+    networks:
+      - mongo-net
+
+volumes:
+  mongodb_data:
+    external:
+      name: mongodb_data
+
+
+networks:
+  mongo-net:
+    external: true
+    name: mongo-net
+    driver: bridge
